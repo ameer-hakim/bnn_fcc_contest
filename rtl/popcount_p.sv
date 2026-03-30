@@ -1,3 +1,4 @@
+// CREDIT: Greg Stitt, University of Florida
 module popcount_p
 #(
     parameter int NUM_INPUTS=8,

@@ -53,7 +53,7 @@ module binary_neuron_p #(
 
   assign pc_acc_sel = last_delayed_r;
   assign sum = pc_beat_r + pc_acc_r;
-  assign pc_acc_next = ( pc_acc_sel ) ? '0 : sum;
+  assign pc_acc_next = ( pc_acc_sel ) ? '0 : sum; // Remove mux, use pc_acc_sel as a rest in ff process
   
 
   always_comb begin
