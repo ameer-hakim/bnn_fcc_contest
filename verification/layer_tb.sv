@@ -76,7 +76,7 @@ module layer_tb;
     logic [P_N-1:0] expected_outputs;
   } expected_result_t;
 
-  expected_result_t expected_queue[NUM_NEURONS];
+  expected_result_t expected_queue[$];
  
   // CLOCK GENERATION
   initial begin : gen_clk
@@ -183,23 +183,23 @@ module layer_tb;
   endtask
 
   task send_test_input(
-    input logic [NUM_INPUTS-1:0] test_input,
+    input logic [NUM_INPUTS-1:0] test_input
   );
     automatic logic [P_N-1:0] expected_outputs;
 
     for (int np=0; np < P_N; np++) begin
-      int neuron_id = 0 * P_N + np;
-      int popcount = calc_neuron_output(neuron_id, test_input);
+      automatic int neuron_id = 0 * P_N + np;
+      automatic int popcount = calc_neuron_output(neuron_id, test_input);
       expected_outputs[np] = (popcount >= expected_thresholds[neuron_id]) ? 1'b1 : 1'b0;
     end
 
-    expected_result_t exp;
+    automatic expected_result_t exp;
     exp.expected_outputs = expected_outputs;
-    exp_queue.push_back(exp);
+    expected_queue.push_back(exp);
 
     for (int beat = 0; beat < BEATS_PER_NEURON; beat++) begin
-      logic [P_W-1:0] beat_data = test_input[beat*P_W +: PW];
-      logic is_last = (beat == BEATS_PER_NEURON-1);
+      automatic logic [P_W-1:0] beat_data = test_input[beat*P_W +: P_W];
+      automatic logic is_last = (beat == BEATS_PER_NEURON-1);
       send_input_beat(beat_data, is_last); 
     end
 
@@ -234,7 +234,7 @@ module layer_tb;
     config_we_t <= 1'b0;
     config_we_w <= 1'b0;
     config_addr_w <= '0;
-    config_addr_w <= '0;
+    config_addr_t <= '0;
     config_data_w <= '0;
     config_data_t <= '0;
     config_np_id <= '0;
@@ -292,9 +292,9 @@ module layer_tb;
     // LOAD CONFIG
     test_num++;
     $display("TEST %0d: LOAD RANDOM CONFIGURATION", test_num);
-    load_random_configuration();
+    load_random_config();
     repeat (5) @(posedge clk);
-    display("CONFIGURATION COMPLETE");
+    $display("CONFIGURATION COMPLETE");
   end
   
 
