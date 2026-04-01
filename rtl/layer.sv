@@ -3,11 +3,15 @@
 // Binary Neural Net layer module containing NP's, Input Buffer, Weight/Threshold RAMS,
 // and Configuration Controller
 
+// questions: do I need to give this a ready output? 
+// 
+// I might need to make this work so that there is one beat per neuron      
+
 module layer #(
   // PARAMETERS
   parameter int LAYER_ID = 0,
-  parameter int NUM_INPUTS = 784,
-  parameter int NUM_NEURONS = 256,
+  parameter int NUM_INPUTS = 8,
+  parameter int NUM_NEURONS = 8,
   parameter int P_W = 8,
   parameter int P_N = 8,
 
@@ -41,15 +45,18 @@ module layer #(
   //// DATA
   input logic layer_valid_in,
   input logic layer_last_in,
-  input logic [P_W-1:0] layer_data_in,
+  input logic [P_N-1:0] layer_data_in,
 
   // OUTPUTS
   output logic layer_valid_out,
-  output logic [P_N-1:0] layer_data_out,
-  output logic [P_W-1:0] layer_popcounts[P_N]
+  output logic [P_W-1:0] layer_data_out,
+  output logic [MAX_PC_WIDTH-1:0] layer_popcounts[P_N]
 );
 
-  // COUNTERS
+  // REGISTERS
+  logic layer_valid_in_r;
+  logic layer_last_in_r;
+  logic [P_W-1:0] layer_data_in_r;
   logic [$clog2(NEURONS_PER_NP)-1:0] neuron_batch_r;
   logic [$clog2(BEATS_PER_NEURON)-1:0] beat_count_r;
 
@@ -75,8 +82,6 @@ module layer #(
 
   // NP 
   logic [P_N-1:0] np_valid_out;
-  logic [P_N-1:0] np_y;
-  logic [P_N-1:0][MAX_PC_WIDTH-1:0] np_popcount;
 
 
   // COMBO LOGIC
@@ -125,8 +130,14 @@ module layer #(
     if (rst) begin
       neuron_batch_r <= '0;
       beat_count_r <= '0;
+      layer_data_in_r <= '0; 
+      layer_valid_in_r <= 1'b0;
+      layer_last_in_r <= 1'b0;
     end else begin
+      layer_valid_in_r <= layer_valid_in;
+      layer_last_in_r <= layer_last_in;
       if (!config_mode && layer_valid_in) begin
+	layer_data_in_r <= layer_data_in;
         if (layer_last_in) begin
           beat_count_r <= '0;
           
@@ -180,18 +191,18 @@ module layer #(
   end
 
   // GEN NP's
-  for (genvar i=0; i<P_N; i++) begin
+  for (genvar i=0; i<P_N; i++) begin : g_NP
     binary_neuron_p #(
       .P_W(P_W),
       .MAX_PC_WIDTH(MAX_PC_WIDTH)
     ) NP (
       .clk(clk),
       .rst(rst),
-      .x(layer_data_in ),
+      .x(layer_data_in_r),
       .w(w_rd_data[i]),
       .threshold(t_rd_data[i]),
-      .valid_in(layer_valid_in),
-      .last(layer_last_in),
+      .valid_in(layer_valid_in_r),
+      .last(layer_last_in_r),
       .valid_out(np_valid_out[i]),
       .y(layer_data_out[i]),
       .popcount(layer_popcounts[i])
@@ -201,7 +212,5 @@ module layer #(
 
   // ASSIGN OUTPUTS
   assign layer_valid_out = np_valid_out[0];
-  //assign layer_data_out  = np_y;
-  //assign layer_popcounts = np_popcount;
 
 endmodule
