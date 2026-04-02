@@ -36,7 +36,7 @@ module binary_neuron_p #(
   // REGISTERS
   logic [P_W-1:0] xnor_r;
   logic [MAX_PC_WIDTH-1:0] threshold_r, threshold_delayed_r, pc_acc_r, pc_beat_r, popcount_r;
-  logic y_r, last_r, last_delayed_r, pc_acc_sel_r,valid_out_r, valid_in_delayed_r;
+  logic y_r, last_delayed_r,valid_out_r, valid_in_delayed_r;
 
   // SELECT SIGNALS
   logic pc_acc_sel;
