@@ -1,5 +1,4 @@
 // CREDIT: Greg Stitt, University of Florida
-
 module ram_sdp #(
     parameter int DATA_WIDTH = 16,
     parameter int ADDR_WIDTH = 10,
@@ -15,14 +14,13 @@ module ram_sdp #(
     input  logic [ADDR_WIDTH-1:0] wr_addr,
     input  logic [DATA_WIDTH-1:0] wr_data
 );
-    // Vivado surprisingly supports attributes defined by a packed logic array, but
-    // not a string. So, we simply convert the string to a packed array.
+    // The Vivado workaround doesn't break anything in Quartus, so we reuse it.
     localparam int MAX_STYLE_LEN = 16;
     typedef logic [MAX_STYLE_LEN*8-1:0] string_as_logic_t;
     localparam logic [MAX_STYLE_LEN*8-1:0] MEM_STYLE = string_as_logic_t'(STYLE);
 
-    // Use the packed logic array in the attribute, instead of the string parameter.
-    (* ram_style = MEM_STYLE *) logic [DATA_WIDTH-1:0] ram[2**ADDR_WIDTH];
+    // Specify ram_style for Vivado, and ramstyle for Quartus.
+    (* ram_style = MEM_STYLE, ramstyle = MEM_STYLE *) logic [DATA_WIDTH-1:0] ram[2**ADDR_WIDTH];
     logic [DATA_WIDTH-1:0] rd_data_ram;
 
     always_ff @(posedge clk) begin

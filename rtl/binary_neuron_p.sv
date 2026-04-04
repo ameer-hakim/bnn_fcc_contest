@@ -17,6 +17,7 @@ module binary_neuron_p #(
   // CLK AND RST
   input  logic                    clk,
   input  logic                    rst,
+  input  logic                    en,
 
   // INPUTS 
   input  logic [P_W-1:0]          x,
@@ -53,14 +54,13 @@ module binary_neuron_p #(
 
   assign pc_acc_sel = last_delayed_r;
   assign sum = pc_beat_r + pc_acc_r;
-  assign pc_acc_next = ( pc_acc_sel ) ? '0 : sum; // Remove mux, use pc_acc_sel as a rest in ff process
+  assign pc_acc_next = (pc_acc_sel) ? '0 : sum;
   
 
   always_comb begin
     for (int i=0; i<P_W; i++) begin
       xnor_unpacked[i] = xnor_r[i];
     end
-
   end
   
   // STRUCTURAL INSTANTIATION
@@ -71,7 +71,7 @@ module binary_neuron_p #(
   ) pc_p_recursive (
       .clk(clk),
       .rst(rst),
-      .en(1'b1),
+      .en(en),
       .inputs(xnor_unpacked),
       .sum(pc_beat_r)
   );
@@ -82,7 +82,7 @@ module binary_neuron_p #(
   ) d_last (
       .clk(clk),
       .rst(rst),
-      .en(1'b1),
+      .en(en),
       .in(last),
       .out(last_delayed_r)
   );
@@ -93,7 +93,7 @@ module binary_neuron_p #(
   ) d_threshold (
       .clk(clk),
       .rst(rst),
-      .en(1'b1),
+      .en(en),
       .in(threshold_r),
       .out(threshold_delayed_r)
   );
@@ -104,23 +104,25 @@ module binary_neuron_p #(
   ) d_valid_in (
       .clk(clk),
       .rst(rst),
-      .en(1'b1),
+      .en(en),
       .in(valid_in),
       .out(valid_in_delayed_r)
   );
 
   // SEQUENTIAL LOGIC
   always_ff @(posedge clk, posedge rst) begin
-    xnor_r <= (~(x ^ w));
+    if (en) begin
+      if (valid_in) xnor_r <= (~(x ^ w));
 
-    if (last) threshold_r <= threshold;
-    if (valid_in_delayed_r) pc_acc_r <= pc_acc_next;
+      if (last) threshold_r <= threshold;
+      if (valid_in_delayed_r) pc_acc_r <= pc_acc_next;
 
-    y_r <= y_next;
-    valid_out_r <= last_delayed_r;
-    popcount_r <= sum;
+      y_r <= y_next;
+      valid_out_r <= last_delayed_r;
+      popcount_r <= sum;
+    end
 
-    if ( rst ) begin
+    if (rst) begin
         threshold_r <= '0;
         pc_acc_r <= '0;
         valid_out_r <= '0;
