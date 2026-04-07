@@ -2,11 +2,11 @@
 
 module layer_tb;
 
-  localparam int NUM_TESTS = 1;
+  localparam int NUM_TESTS = 10;
   localparam int LAYER_ID = 0;
   localparam int NUM_INPUTS = 8;   
-  localparam int NUM_NEURONS = 2;  
-  localparam int P_N = 1;
+  localparam int NUM_NEURONS = 12;  
+  localparam int P_N = 4;
  
   // Calculated values to go with DUT localparams         
   localparam int MAX_PC_WIDTH = $clog2(NUM_INPUTS + 1);
@@ -34,6 +34,7 @@ module layer_tb;
   logic [P_W-1:0] layer_data_in;
 
   logic layer_go_out;
+  logic layer_ready;
   logic layer_last;
   logic layer_valid_out;
   logic [P_N-1:0] layer_data_out;
@@ -64,6 +65,7 @@ module layer_tb;
 
   // OUTPUTS
     .layer_go_out(layer_go_out),
+    .layer_ready(layer_ready),
     .layer_valid_out(layer_valid_out),
     .layer_last(layer_last),
     .layer_data_out(layer_data_out),
@@ -74,8 +76,8 @@ module layer_tb;
   int neuron_count;
 
   typedef struct { 
-    bit [MAX_PC_WIDTH-1:0] layer_popcounts[];
-    bit [NUM_NEURONS-1:0] layer_data_out;
+    logic [MAX_PC_WIDTH-1:0] layer_popcounts[NUM_NEURONS];
+    logic [NUM_NEURONS-1:0] layer_data_out;
   } dut_t;
   
   // MAILBOXES	
@@ -86,10 +88,10 @@ module layer_tb;
   // TEST ITEM
   class layer_item;
  
-    rand bit [P_W-1:0] x;
-    rand bit [P_W-1:0] w[];
+    rand logic [P_W-1:0] x;
+    rand logic [P_W-1:0] w[];
 
-    rand bit [MAX_PC_WIDTH-1:0] thresholds[];
+    rand logic [MAX_PC_WIDTH-1:0] thresholds[];
 
 
     constraint c_len {
@@ -102,8 +104,8 @@ module layer_tb;
 
   // FUNCTIONS
   function int compute_popcount (
-    input bit [P_W-1:0] x, 
-    input bit [P_W-1:0] w
+    input logic [P_W-1:0] x, 
+    input logic [P_W-1:0] w
   );
     automatic logic [P_W-1:0] xnor_result = ~(x^w);
     automatic int sum = 0;
@@ -117,11 +119,11 @@ module layer_tb;
   endfunction
 
   function void compute_output (
-    input bit [P_W-1:0] x, 
-    input bit [P_W-1:0] w[], 
-    input bit [MAX_PC_WIDTH-1:0] t[], 
-    output bit [NUM_NEURONS-1:0] y, 
-    output bit [MAX_PC_WIDTH-1:0] pc[]
+    input logic [P_W-1:0] x, 
+    input logic [P_W-1:0] w[NUM_NEURONS], 
+    input logic [MAX_PC_WIDTH-1:0] t[NUM_NEURONS], 
+    output logic [NUM_NEURONS-1:0] y, 
+    output logic [MAX_PC_WIDTH-1:0] pc[NUM_NEURONS]
   );
 
   // COMPUTE POPCOUNTS
@@ -228,10 +230,12 @@ module layer_tb;
        driver_mailbox.get(item);
        scoreboard_input_mailbox.put(item);
 
+       @(posedge clk iff layer_ready);
        load_config(item);
        layer_go_in <= 1'b1;
        @(posedge clk);
        layer_data_in <= item.x;
+       layer_go_in <= 1'b0;
        layer_valid_in <= 1'b1;
        @(posedge clk);
        layer_valid_in <= 1'b0;
