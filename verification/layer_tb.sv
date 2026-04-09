@@ -2,15 +2,16 @@
 
 module layer_tb;
 
-  localparam int NUM_TESTS = 10;
+  localparam int NUM_TESTS = 10000;
+  localparam int TEST_LENGTH = 10;
   localparam int LAYER_ID = 0;
-  localparam int NUM_INPUTS = 8;   
-  localparam int NUM_NEURONS = 12;  
+  localparam int NUM_INPUTS = 1;   
+  localparam int NUM_NEURONS = 8;  
   localparam int P_N = 4;
  
   // Calculated values to go with DUT localparams         
   localparam int MAX_PC_WIDTH = $clog2(NUM_INPUTS + 1);
-  localparam int P_W = NUM_INPUTS;
+  localparam int P_W = NUM_INPUTS; // For max throughput bnn will P_W = P_N of the previous layer (i.e. NUM_INPUTS)
   localparam int NEURONS_PER_NP = (NUM_NEURONS / P_N);
   localparam int WEIGHT_ADDR_WIDTH = $clog2(NEURONS_PER_NP);
   localparam int THRESHOLD_ADDR_WIDTH = $clog2(NEURONS_PER_NP);
@@ -29,6 +30,7 @@ module layer_tb;
   logic [MAX_PC_WIDTH-1:0]         config_t_data;
   logic [$clog2(P_N)-1:0]           config_np_id;
 
+  logic layer_en;
   logic layer_valid_in;
   logic layer_go_in;
   logic [P_W-1:0] layer_data_in;
@@ -59,6 +61,7 @@ module layer_tb;
     .config_np_id(config_np_id),
   
   //// DATA
+    .layer_en(layer_en),
     .layer_valid_in(layer_valid_in),
     .layer_go_in(layer_go_in),
     .layer_data_in(layer_data_in),
@@ -80,27 +83,33 @@ module layer_tb;
     logic [NUM_NEURONS-1:0] layer_data_out;
   } dut_t;
   
-  // MAILBOXES	
-  mailbox driver_mailbox = new;
-  mailbox scoreboard_input_mailbox = new;;
-  mailbox scoreboard_output_mailbox = new;
+  typedef struct {
+    logic [P_W-1:0] x;
+    logic [P_W-1:0] w[NUM_NEURONS];
+    logic [MAX_PC_WIDTH-1:0] thresholds[NUM_NEURONS];
+  } sb_item_t;
 
   // TEST ITEM
   class layer_item;
  
-    rand logic [P_W-1:0] x;
+    rand logic [NUM_INPUTS-1:0] x[];
     rand logic [P_W-1:0] w[];
 
     rand logic [MAX_PC_WIDTH-1:0] thresholds[];
 
 
     constraint c_len {
+      x.size() == TEST_LENGTH;
       w.size() == NUM_NEURONS;
       thresholds.size() == NUM_NEURONS;
     }
-
   endclass
 
+
+  // MAILBOXES	
+  mailbox driver_mailbox = new;
+  mailbox scoreboard_input_mailbox = new;;
+  mailbox scoreboard_output_mailbox = new;
 
   // FUNCTIONS
   function int compute_popcount (
@@ -199,11 +208,13 @@ module layer_tb;
 
     $display("[%0t] INITIALIZING DUT...", $time);
     rst <= 1'b1;
+    layer_en <= 1'b0;
     layer_valid_in <= 1'b0;
     layer_data_in <= '0;
     layer_go_in <= '0;
     repeat (5) @(posedge clk);
     @(negedge clk);
+    layer_en <= 1'b1;
     rst <= 1'b0;
     $display("[%0t] INITIALIZION COMPLETE...", $time);
 
@@ -224,21 +235,36 @@ module layer_tb;
   // DRIVER
   initial begin : driver
     layer_item item;
+    sb_item_t sb_item;
 
      @(posedge clk iff !rst); 
+     @(posedge clk iff layer_ready);
      forever begin
        driver_mailbox.get(item);
-       scoreboard_input_mailbox.put(item);
 
-       @(posedge clk iff layer_ready);
        load_config(item);
-       layer_go_in <= 1'b1;
-       @(posedge clk);
-       layer_data_in <= item.x;
-       layer_go_in <= 1'b0;
-       layer_valid_in <= 1'b1;
-       @(posedge clk);
-       layer_valid_in <= 1'b0;
+
+       foreach (item.x[i]) begin
+         sb_item.x = item.x[i];
+
+	 for (int n=0; n< NUM_NEURONS; n++) begin
+	   sb_item.w[n] = item.w[n];
+	   sb_item.thresholds[n] = item.thresholds[n];
+         end 
+
+	 scoreboard_input_mailbox.put(sb_item);
+
+         layer_go_in <= 1'b1;
+         @(posedge clk);
+
+         layer_data_in <= item.x[i];
+         layer_go_in <= 1'b0;
+         layer_valid_in <= 1'b1;
+	 @(posedge clk)
+         layer_valid_in <= 1'b0;
+         repeat (NEURONS_PER_NP-1)  @(posedge clk);
+
+       end
      end
      
   end 
@@ -277,10 +303,9 @@ module layer_tb;
 
     dut_t expected_result;
     dut_t actual_result;
-    layer_item test_input;
+    sb_item_t test_input;
 
     for (int i=0; i<NUM_TESTS; i++) begin
-      test_input = new();
       scoreboard_input_mailbox.get(test_input); 
       scoreboard_output_mailbox.get(actual_result);
       
@@ -310,4 +335,5 @@ module layer_tb;
       
   end
 
+  assert property (@(posedge clk) disable iff (rst) layer_go_in |=> layer_valid_in);
 endmodule

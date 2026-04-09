@@ -39,6 +39,7 @@ module layer #(
   input logic [$clog2(P_N)-1:0]          config_np_id,
   
   //// DATA
+  input logic layer_en,
   input logic layer_valid_in,
   input logic layer_go_in,
   input logic [P_W-1:0] layer_data_in,
@@ -140,48 +141,52 @@ module layer #(
     
       // SEQUENTIAL LOGIC
       always_ff @(posedge clk, posedge rst) begin
-	// NP CONTROL SIGNALS 
-        np_last_r  <= go_r;
-	np_valid_r <= go_r;
-        
-	// INPUT BUFFER
-	if (layer_valid_in) begin
-	  layer_data_in_r <= layer_data_in;
-        end
-
-	// DONE COUNTER TO SIGNAL LAST NEURON BATCH
-	if (np_valid_out[0]) begin
-	  if (valid_count_r == NEURONS_PER_NP-1) begin
-	    valid_count_r <= '0;
-            layer_last <= 1'b1;
-          end else begin
-	    valid_count_r <= valid_count_r + 1'b1;
-	    layer_last <= 1'b0;
-	  end
-	end
-
-	// OUTPUT BUFFER
-	layer_valid_out_r <= (np_valid_out[0]) ? 1'b1 : 1'b0;
-        layer_popcounts_r <= np_popcounts;
-	layer_data_out_r <= np_y;
-
-
-	// ADDRESS GENERATOR GO FOR PRE-FETCH
-	if (layer_go_in) begin
-          go_r <= 1'b1;
-	  done_r <= 1'b0;
-	end
-
-	// ADDRESS GENERATION
-	if (go_r) begin
-          if (neuron_count_r == NEURONS_PER_NP-1) begin
-            go_r <= 1'b0;
-	    done_r <= 1'b1;
-	    neuron_count_r <= '0; 
-          end else begin 
-            neuron_count_r <= neuron_count_r + 1'b1;
-
+        if (layer_en) begin
+	  // NP CONTROL SIGNALS 
+          np_last_r  <= go_r;
+	  np_valid_r <= go_r;
+          
+	  // INPUT BUFFER
+	  if (layer_valid_in) begin
+	    layer_data_in_r <= layer_data_in;
           end
+
+	  // DONE COUNTER TO SIGNAL LAST NEURON BATCH
+	  layer_last <= 1'b0;
+
+	  if (np_valid_out[0]) begin
+	    if (valid_count_r == NEURONS_PER_NP-1) begin
+	      valid_count_r <= '0;
+              layer_last <= 1'b1;
+            end else begin
+	      valid_count_r <= valid_count_r + 1'b1;
+	    end
+	  end
+
+
+	  // OUTPUT BUFFER
+	  layer_valid_out_r <= (np_valid_out[0]) ? 1'b1 : 1'b0;
+          layer_popcounts_r <= np_popcounts;
+	  layer_data_out_r <= np_y;
+
+
+	  // ADDRESS GENERATOR GO FOR PRE-FETCH
+	  if (layer_go_in && layer_ready) begin
+            go_r <= 1'b1;
+	    done_r <= 1'b0;
+	  end
+
+	  // ADDRESS GENERATION
+	  if (go_r) begin
+            if (neuron_count_r == NEURONS_PER_NP-1) begin
+              go_r <= 1'b0;
+	      done_r <= 1'b1;
+	      neuron_count_r <= '0; 
+            end else begin 
+              neuron_count_r <= neuron_count_r + 1'b1;
+
+            end
+	  end
 	end
 
         if (rst) begin
@@ -240,7 +245,7 @@ module layer #(
         ) NP (
           .clk(clk),
           .rst(rst),
-	  .en(1'b1),
+	  .en(layer_en),
           .x(layer_data_in_r),
           .w(w_rd_data[i]),
           .threshold(t_rd_data[i]),
@@ -261,9 +266,19 @@ module layer #(
       assign layer_ready = done_r;
 
     end else begin
-      assign layer_out_data = layer_data_in;
-      assign layer_valid_out = layer_valid_in;
+      // INPUT LAYER (NO NEURONS)
+
+      assign layer_go_out = layer_go_in;
       assign layer_ready = 1'b1;
+
+      always_ff @(posedge clk, posedge rst) begin
+	if (layer_go_in && layer_en) begin
+	  layer_data_out <= layer_data_in;
+          layer_valid_out <= layer_go_in;	
+	  layer_last <= layer_go_in;
+        end
+          
+      end
     end 
   endgenerate
 
