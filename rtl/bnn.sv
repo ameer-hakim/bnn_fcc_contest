@@ -2,7 +2,7 @@
 // bnn.sv
 // CONCATENATED layer.sv MODULES FOR IMPLEMENTATION INTO bnn_fcc.sv
 //
-`inlude "bnn_fcc_pkg.svh"
+`include "bnn_fcc_pkg.svh"
 
 module bnn #(
   // PARAMETERS
@@ -33,8 +33,8 @@ module bnn #(
   input logic [NP_CYCLES-1:0] config_w_addr,
   input logic [NP_CYCLES-1:0] config_t_addr,
   input logic [(TOPOLOGY[0]/NP_CYCLES)-1:0] config_w_data,
-  input logic config_t_data,
-  input logic [] config_np_id;
+  input logic [(TOPOLOGY[0]/NP_CYCLES)-1:0] config_t_data,
+  input logic [LAYER_PN[1]-1:0] config_np_id; // Size signal for largest num of NP's
 
   // INPUTS
   input logic [(TOPOLOGY[0])-1:0] bnn_data_in,
@@ -85,7 +85,7 @@ module bnn #(
 
     end
   
-    logic [] cl_w_data;
+    logic [((i>0) ? LAYER_PN[i])-1:0 : 0] cl_w_data;
 
     assign cl_w_data = cl_w_data[];
 
@@ -126,39 +126,5 @@ module bnn #(
       .layer_popcount(layer_popcounts)
     );
   end
-
-//    // PARAMETERS
-//    .LAYER_ID(TOTAL_LAYERS-1),
-//    .NUM_INPUTS(TOPOLOGY[TOTAL_LAYERS-2]),
-//    .NUM_NEURONS(TOPOLOGY[TOTAL_LAYERS-1])
-//  ) output_layer (
-//    // CLK AND RST
-//    .clk(clk),
-//    .rst(rst),
-//  
-//    // INPUTS
-//    //// CONFIGURATION INTERFACE
-//    .config_mode(),
-//    .config_w_we(),
-//    .config_t_we(),
-//    .config_w_addr(),
-//    .config_t_addr(),
-//    .config_w_data(),
-//    .config_t_data(),
-//    .config_np_id(),
-//    
-//    //// DATA
-//    .layer_valid_in(),
-//    .layer_go_in(),
-//    .layer_data_in(),
-//  
-//    // OUTPUTS
-//    .layer_go_out(),
-//    .layer_ready(layer_ready[TOTAL_LAYERS-1]),
-//    .layer_last(bnn_last),
-//    .layer_valid_out(bnn_valid_out),
-//    .layer_data_out(bnn_y),
-//    .layer_popcount(bnn_popcounts)
-//  );
 
 endmodule
