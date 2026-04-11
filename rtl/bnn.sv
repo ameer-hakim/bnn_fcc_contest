@@ -1,24 +1,25 @@
 // AMEER HAKIM
 // bnn.sv
-// CONCATENATED layer.sv MODULES FOR IMPLEMENTATION INTO bnn_fcc.sv
+// Concatenated layers for implementation into bnn_fcc.sv
 
+// PACKAGES
 `include "bnn_fcc_pkg.svh"
 
 module bnn #(
   // PARAMETERS
-  parameter int TOTAL_LAYERS = 4,  // Includes input, hidden, and output
+  parameter int TOTAL_LAYERS = 4,                                                       // Includes input, hidden, and output
   parameter int TOPOLOGY[TOTAL_LAYERS] = '{0: 784, 1: 256, 2: 256, 3: 10, default: 0},  // 0: input, TOTAL_LAYERS-1: output
-  parameter int NP_CYCLES = 1,  // NEURONS / P_N = NP_CYCLES -> P_N = NEURONS / NP_CYCLES
+  parameter int NP_CYCLES = 1,                                                          // NEURONS / P_N = NP_CYCLES -> P_N = NEURONS / NP_CYCLES
 
   // LOCALPARAMS
-  localparam int MAX_PW = TOPOLOGY[0],
   localparam int LAYER_PN[TOTAL_LAYERS] = '{
-    0: 1,
+    0: 0,
     1: get_pn(TOPOLOGY[1], NP_CYCLES),
     2: get_pn(TOPOLOGY[2], NP_CYCLES),
     3: get_pn(TOPOLOGY[3], NP_CYCLES),
     default : 0
   },
+  localparam int MAX_PW = TOPOLOGY[0],
   localparam int MAX_PN = LAYER_PN[1],
   localparam int MAX_PC_WIDTH = $clog2(LAYER_PN[1]) + 1
 
@@ -50,18 +51,55 @@ module bnn #(
 );
 
   // LAYER SIGNAL ARRAYS
-  logic [TOTAL_LAYERS-1:0] layer_en;
+  logic [TOTAL_LAYERS-1:0] layer_en = '1;
   logic [TOTAL_LAYERS-1:0] layer_ready;
   logic [TOTAL_LAYERS-1:0] layer_go_out;
   logic [TOTAL_LAYERS-1:0] layer_valid_out;
   logic [TOTAL_LAYERS-1:0] layer_last;
 
-  logic [TOTAL_LAYERS-1:0][MAX_PN-1:0] interlayer_data;
-  logic [MAX_PC_WIDTH-1:0]             interlayer_popcounts [TOTAL_LAYERS-1:0][MAX_PN]; 
+  // INPUT LAYER
+  logic input_go_out_r;
+  logic input_valid_in_r, input_valid_out_r;
+  logic [TOPOLOGY[0]-1:0] input_data_in_r, input_data_out_r; 
+
+  // COMBO LOGIC
+  //always_comb begin 
+  //  // LAYER ENABLE LOGIC
+  //  for (int i=0; i<TOTAL_LAYERS-1; i++) begin
+  //    layer_en[i] = !(layer_go_out[i] & layer_ready[i+1]); 
+  //  end
+  //end
+
+
+  // SEQUENTIAL LOGIC
+  always_ff @(posedge clk, posedge rst) begin
+    if (layer_en[0]) begin
+      if (bnn_valid_in) input_data_in_r <= bnn_data_in;
+
+      input_valid_in_r <= bnn_valid_in;
+      input_valid_out_r <= input_valid_in_r;
+
+      if (bnn_valid_in) input_data_in_r  <= bnn_data_in;
+      if (input_valid_in_r) input_data_out_r <= input_data_in_r;
+
+      input_go_out_r <= bnn_valid_in;
+    end
+    
+    if (rst) begin
+      input_data_in_r  <= '0;
+      input_data_out_r <= '0;
+
+      input_valid_in_r <= 1'b0;
+      input_valid_out_r <= 1'b0;
+
+      input_go_out_r <= 1'b0;
+    end
+
+  end
 
   // INSTANTIATE LAYERS
   //// HIDDEN LAYERS
-  for (genvar i=0; i<TOTAL_LAYERS; i++) begin : g_layers
+  for (genvar i=1; i<TOTAL_LAYERS; i++) begin : g_layers
 
     // CONFIG DEMUX
     logic cl_mode_i;
@@ -79,11 +117,21 @@ module bnn #(
       assign cl_t_we_i = cl_t_we_i && (layer_sel == i);
 
     end
-  
+
+    // LAYER POPCOUNT
+    if (i==1) begin
+      logic [$clog2(TOPOLOGY[0]+1)-1:0] layer_pc [LAYER_PN[i]]; 
+    end else begin
+      logic [$clog2(LAYER_PN[i-1]+1)-1:0] layer_pc [LAYER_PN[i]];
+    end
+
+    // LAYER DATA
+    logic [LAYER_PN[i]-1:0] layer_data;
+
     layer #(
       // PARAMETERS
       .LAYER_ID   (i),
-      .NUM_INPUTS ((i==0) ? TOPOLOGY[i] : LAYER_PN[i-1] ),
+      .NUM_INPUTS ((i==1) ? TOPOLOGY[0] : LAYER_PN[i-1]),
       .NUM_NEURONS(TOPOLOGY[i]),
       .P_N        (LAYER_PN[i])
     ) layers (
@@ -104,23 +152,24 @@ module bnn #(
       
       //// DATA
       .layer_en(layer_en[i]),
-      .layer_valid_in((i==0) ? bnn_valid_in : layer_valid_out[i-1]),
-      .layer_go_in   ((i==0) ? bnn_valid_in : layer_go_out[i-1]),
-      .layer_data_in ((i==0) ? bnn_data_in : interlayer_data[i-1][LAYER_PN[i-1]-1:0]),
+      .layer_valid_in((i==1) ? input_valid_out_r : layer_valid_out[i-1]),
+      .layer_go_in   ((i==1) ? input_go_out_r    : layer_go_out[i-1]),
+      .layer_data_in ((i==1) ? input_data_out_r  : g_layers[i-1].layer_data),
     
       // OUTPUTS
       .layer_go_out   (layer_go_out[i]),
       .layer_ready    (layer_ready[i]),
       .layer_last     (layer_last[i]),
       .layer_valid_out(layer_valid_out[i]),
-      .layer_data_out (interlayer_data[i][LAYER_PN[i]-1:0]),
-      .layer_popcounts(interlayer_popcounts[i])
+      .layer_data_out (layer_data),
+      .layer_popcounts(layer_pc)
     );
+
   end
 
   // ASSIGN OUTPUTS
-  assign bnn_data_out  = interlayer_data[TOTAL_LAYERS-1][LAYER_PN[TOTAL_LAYERS-1]-1:0];
-  assign bnn_popcounts = interlayer_popcounts[TOTAL_LAYERS-1];
+  assign bnn_data_out  = g_layers[TOTAL_LAYERS-1].layer_data;
+  assign bnn_popcounts = g_layers[TOTAL_LAYERS-1].layer_pc;
   assign bnn_last      = layer_last[TOTAL_LAYERS-1];
   assign bnn_valid_out = layer_valid_out[TOTAL_LAYERS-1];
 
